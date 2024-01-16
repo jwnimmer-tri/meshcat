@@ -1320,7 +1320,7 @@ class Viewer {
         };
         if (object_json.object.type == "_meshfile_object" && object_json.object.format == "gltf") {
             let loader = new GLTFLoader();
-            loader.parse(object_json.object.data, path, (gltf) => {
+            loader.load(object_json.object.url, (gltf) => {
                 let scene = gltf.scene;
                 if (scene === null) {
                     // TODO(SeanCurtis-TRI): What do I do in this case?
@@ -1349,6 +1349,40 @@ class Viewer {
                     }
                     configure_obj(scene);
                 }
+            });
+        } else if (object_json.object.type == "_meshfile_object" && object_json.object.format == "obj") {
+            let manager = new THREE.LoadingManager();
+            manager.setURLModifier(url => {
+                if (url in object_json.object.resources) {
+                    return object_json.object.resources[url];
+                }
+                return url;
+            });
+            let loader = new OBJLoader2(manager);
+            if (object_json.object.mtl_library) {
+                let mtl_loader = new MTLLoader(manager);
+                let mtl_parse_result = mtl_loader.parse(object_json.object.mtl_library + "\n", "");
+                let materials = MtlObjBridge.addMaterialsFromMtlLoader(mtl_parse_result);
+                loader.setMaterials(materials);
+            }
+            loader.load(object_json.object.url, (obj) => {
+                let merged_geom = merge_geometries(obj, true);
+                let merged = new THREE.Mesh(merged_geom, merged_geom.material);
+                if (object_json.object.matrix !== undefined) {
+                    merged.matrix.fromArray(object_json.object.matrix);
+                    merged.matrix.decompose(merged.position, merged.quaternion, merged.scale);
+                }
+                merged.uuid = object_json.object.uuid;
+                configure_obj(merged);
+            });
+        } else if (object_json.geometries !== undefined && object_json.geometries[0].type == "_meshfile_geometry" && object_json.geometries[0].format == "obj") {
+            let material_loader = new THREE.MaterialLoader();
+            let material = material_loader.parse(object_json.materials[0]);
+            let obj_loader = new OBJLoader2();
+            obj_loader.load(object_json.geometries[0].url, (obj) => {
+                let merged_geom = merge_geometries(obj);
+                let mesh = new THREE.Mesh(merged_geom, material);
+                configure_obj(mesh);
             });
         } else {
             let loader = new ExtensibleObjectLoader();
