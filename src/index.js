@@ -1319,8 +1319,7 @@ class Viewer {
             this.set_dirty();
         };
         if (object_json.object.type == "_meshfile_object" && object_json.object.format == "gltf") {
-            let loader = new GLTFLoader();
-            loader.parse(object_json.object.data, path, (gltf) => {
+            let onLoad = (gltf) => {
                 let scene = gltf.scene;
                 if (scene === null) {
                     // TODO(SeanCurtis-TRI): What do I do in this case?
@@ -1349,7 +1348,13 @@ class Viewer {
                     }
                     configure_obj(scene);
                 }
-            });
+            };
+            let loader = new GLTFLoader();
+            if (object_json.object.url !== undefined) {
+                loader.load(object_json.object.url, onLoad);
+            } else {
+                loader.parse(object_json.object.data, null, onLoad);
+            }
         } else {
             let loader = new ExtensibleObjectLoader();
             loader.onTextureLoad = () => { this.set_dirty(); }
