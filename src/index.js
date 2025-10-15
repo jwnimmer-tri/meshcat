@@ -1145,44 +1145,43 @@ function make_gradient_texture(top_color, bottom_color, is_perspective) {
 function load_env_texture(url, background, scene, is_visible, is_perspective,
                           signal_complete) {
     // Action we take on successfully loading a texture (of either flavor).
-    let on_load = (texture) => {
+    let on_load_common = (texture) => {
         background.set_environment_texture(url, texture, scene, is_visible,
                                            is_perspective);
         signal_complete();
     };
-
-    // If we fail to load the HDR version, we report failure.
-    let hdr_load_fail = () => {
+    // Action we take on successfully loading a texture of a specific flavor.
+    let on_load_ldr = (texture) => {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        on_load_common(texture);
+    };
+    let on_load_hdr = (texture) => {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        texture.colorSpace = THREE.LinearSRGBColorSpace;
+        on_load_common(texture);
+    };
+    // Action we take when unable to load either flavor.
+    let on_ultimate_failure = () => {
         console.error(
             `Failure to load the requested environment map '${url}'; reverting to none.`);
         background.clear_environment_texture(scene, is_perspective);
         signal_complete();
     };
 
-    // If we fail to load the LDR version, try it as an HDR image.
-    let ldr_load_fail = () => {
-        new RGBELoader().load(
-            url,
-            (texture) => {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                on_load(texture);
-            },
-            undefined,
-            hdr_load_fail);
-    };
-
     // Try loading the LDR version first. THREE.TextureLoader is far more robust
-    // to failure than RGBELoader. So, we'll give it a chance to fail first.
+    // to failure than RGBELoader. So, we'll give it a chance to fail first. If
+    // it does, fallback to the HDR loader.
     new THREE.TextureLoader().load(
         url,
-        (texture) => {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            texture.colorSpace = THREE.LinearSRGBColorSpace;
-            on_load(texture);
-        },
-        undefined,
-        ldr_load_fail);
-
+        on_load_ldr,
+        /* onProgress = */ undefined,
+        () => {
+            new RGBELoader().load(
+                url,
+                on_load_hdr,
+                /* onProgress = */ undefined,
+                on_ultimate_failure);
+        });
 }
 
 // Utility function for waiting on the definition of an DOM element's child
